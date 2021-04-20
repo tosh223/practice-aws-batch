@@ -1,0 +1,410 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  vpc for ecs and batch
+Parameters:
+  Env:
+    Description: Environment Name
+    Type: String
+    Default: dev
+    AllowedValues: 
+      - dev
+      - prd
+  AZ:
+    Type: String
+    Default: ap-northeast
+    Description: Tokyo
+  Zone:
+    Type: String
+    Default: 1a
+    Description: 1a or 1c or 1d
+  VpcCidr:
+    Description: First and Second Octet of VPC, For example (10.0/172.16/192.168)
+    Type: String
+    Default: 192.168
+    AllowedPattern: "^(10\\.([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])|172\\.(1[6-9]|2[0-9]|3[0-1])|192\\.168)$"
+    ConstraintDescription: xxx.xxx
+  Ec2ImageIdAmzn2:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  Ec2ImageIdWindows:
+    Type : AWS::SSM::Parameter::Value<String>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2016-Japanese-Full-Base  
+  BastionHostKeyPair:
+    Description : 'Name of an existing EC2 KeyPair to enable SSH access to the instance'
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: ssm_key
+    ConstraintDescription : 'Can contain only ASCII characters.'
+  EnableNATGateway: 
+    Default: true
+    Type: String
+    AllowedValues: [true, false]
+
+Conditions: 
+  EnableNATGateway: !Equals [ !Ref EnableNATGateway, true ]
+
+Mappings:
+  VpcConfig:
+    dev:
+      VPC             : .0.0/16
+      PublicSubnet    : .0.0/24
+      PrivateSubnet   : .10.0/24
+      # BastionInstance : .0.10
+      App01Instance   : .10.10
+      App02Instance   : .10.11
+
+Resources:
+  #-----------------------------------------------------------------------------
+  # VPC
+  #-----------------------------------------------------------------------------
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Sub [ "${VpcCidr}${Subnet}", { Subnet: !FindInMap [ VpcConfig, !Ref Env, VPC ]}]
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+
+  #-----------------------------------------------------------------------------
+  # Internet Gateway
+  #-----------------------------------------------------------------------------
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  #-----------------------------------------------------------------------------
+  # Public Subnet
+  #-----------------------------------------------------------------------------
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Join ["-", [!Ref AZ, !Ref Zone]]
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Sub [ "${VpcCidr}${Subnet}", { Subnet: !FindInMap [ VpcConfig, !Ref Env, PublicSubnet ]}]
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  #-----------------------------------------------------------------------------
+  # Private Subnet
+  #-----------------------------------------------------------------------------
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Join ["-", [!Ref AZ, !Ref Zone]]
+      CidrBlock: !Sub [ "${VpcCidr}${Subnet}", { Subnet: !FindInMap [ VpcConfig, !Ref Env, PrivateSubnet ]}]
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  #-----------------------------------------------------------------------------
+  # NAT Gateway
+  #-----------------------------------------------------------------------------
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: EnableNATGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    Condition: EnableNATGateway
+    Properties:
+      Domain: VPC
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Condition: EnableNATGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  #-----------------------------------------------------------------------------
+  # VPC Endpoints
+  #-----------------------------------------------------------------------------
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+
+  EC2MessageEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2messages"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+
+  EC2Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+
+  SSMAgentEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssmmessages"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcId: !Ref VPC
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+
+  EndpointSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: Endpoint Security Group
+      GroupDescription: Enable SSM Session to the Linux instance
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Sub [ "${VpcCidr}${Subnet}", { Subnet: !FindInMap [ VpcConfig, !Ref Env, VPC ]}]
+
+  # https://docs.aws.amazon.com/ja_jp/systems-manager/latest/userguide/ssm-agent-minimum-s3-permissions.html
+  S3BucketPolicyForSSM:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: S3BucketPolicyForSSM
+      Roles:
+        - !Ref ServerRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action: "s3:GetObject"
+            Resource:
+              - !Sub "arn:aws:s3:::aws-ssm-${AWS::Region}/*"
+              - !Sub "arn:aws:s3:::aws-windows-downloads-${AWS::Region}/*"
+              - !Sub "arn:aws:s3:::amazon-ssm-${AWS::Region}/*"
+              - !Sub "arn:aws:s3:::amazon-ssm-packages-${AWS::Region}/*"
+              - !Sub "arn:aws:s3:::${AWS::Region}-birdwatcher-prod/*"
+              - !Sub "arn:aws:s3:::patch-baseline-snapshot-${AWS::Region}/*"
+
+  #-----------------------------------------------------------------------------
+  # EC2 App Server 01: Linux
+  #-----------------------------------------------------------------------------
+  App01SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: App Security Group 01
+      GroupDescription: App Security Group 01
+      VpcId: !Ref VPC
+
+  App01Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref Ec2ImageIdAmzn2
+      InstanceType: t3.nano
+      IamInstanceProfile: !Ref EC2IamInstanceProfile
+      NetworkInterfaces: 
+        - SubnetId: !Ref PrivateSubnet
+          PrivateIpAddress: !Sub [ "${VpcCidr}${Ip}", { Ip: !FindInMap [ VpcConfig, !Ref Env, App01Instance ]}]
+          GroupSet: 
+            - !Ref App01SecurityGroup
+          AssociatePublicIpAddress: false
+          DeviceIndex: 0
+      CreditSpecification: 
+        CPUCredits: standard
+      Tags:
+        - Key: Name
+          Value: App01-Amzn2
+
+  #-----------------------------------------------------------------------------
+  # EC2 App Server 02: Windows
+  #-----------------------------------------------------------------------------
+  # App02SecurityGroup:
+  #   Type: 'AWS::EC2::SecurityGroup'
+  #   Properties:
+  #     GroupName: App Security Group 02
+  #     GroupDescription: App Security Group 02
+  #     VpcId: !Ref VPC
+
+  # App02Instance:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     ImageId: !Ref Ec2ImageIdWindows
+  #     InstanceType: t3.nano
+  #     KeyName: !Ref BastionHostKeyPair
+  #     IamInstanceProfile: !Ref EC2IamInstanceProfile
+  #     NetworkInterfaces: 
+  #       - SubnetId: !Ref PrivateSubnet
+  #         PrivateIpAddress: !Sub [ "${VpcCidr}${Ip}", { Ip: !FindInMap [ VpcConfig, !Ref Env, App02Instance ]}]
+  #         GroupSet: 
+  #           - !Ref App02SecurityGroup
+  #         AssociatePublicIpAddress: false
+  #         DeviceIndex: 0
+  #     CreditSpecification: 
+  #       CPUCredits: standard
+  #     Tags:
+  #       - Key: Name
+  #         Value: App02-Windows
+
+  #-----------------------------------------------------------------------------
+  # EC2 IAM
+  #-----------------------------------------------------------------------------
+  ServerRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+
+  EC2IamInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        - Ref: ServerRole
+      InstanceProfileName: thin-ssm-Server
+
+  #-----------------------------------------------------------------------------
+  # AWS Batch
+  #-----------------------------------------------------------------------------
+  BatchJobDefinition:
+    Type: 'AWS::Batch::JobDefinition'
+    Properties:
+      Type: container
+      PlatformCapabilities:
+        - FARGATE
+      ContainerProperties:
+        executionRoleArn: !Ref BatchExecutionRole
+        fargatePlatformConfiguration:
+          platformVersion: LATEST
+        Image: !Sub 137112412989.dkr.ecr.${AWS::Region}.amazonaws.com/amazonlinux:latest
+        Command:
+          - echo
+          - Hello world
+      resourceRequirements:
+        - type: MEMORY
+          value: 512
+        - type: VCPU
+          value: 0.25
+      RetryStrategy:
+        Attempts: 1
+
+  BatchJobQueue:
+    Type: 'AWS::Batch::JobQueue'
+    Properties:
+      Priority: 1
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref BatchComputeEnvironment
+
+  BatchComputeEnvironment:
+    Type: 'AWS::Batch::ComputeEnvironment'
+    ComputeEnvironmentName: batch-on-fargate-spot
+    Properties:
+      Type: MANAGED
+      ComputeResources:
+        Type: FARGATE_SPOT
+        MaxvCpus: 4
+        Subnets:
+          - !Ref PrivateSubnet
+        SecurityGroupIds:
+          - !Ref App01SecurityGroup
+      ServiceRole: !Ref BatchServiceRole
+      State: ENABLED
+
+  BatchExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/ecsTaskExecutionRole'  
+
+  BatchServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: batch.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole'
+
+Outputs:
+  BatchComputeEnvironmentArn:
+    Value: !Ref BatchComputeEnvironment
+  BatchJobQueueArn:
+    Value: !Ref BatchJobQueue
+  BatchJobDefinitionArn:
+    Value: !Ref BatchJobDefinition

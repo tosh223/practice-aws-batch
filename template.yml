@@ -337,20 +337,35 @@ Resources:
       PlatformCapabilities:
         - FARGATE
       ContainerProperties:
-        executionRoleArn: !Ref BatchExecutionRole
-        fargatePlatformConfiguration:
-          platformVersion: LATEST
+        ExecutionRoleArn: !GetAtt BatchExecutionRole.Arn
+        FargatePlatformConfiguration:
+          PlatformVersion: LATEST
         Image: !Sub 137112412989.dkr.ecr.${AWS::Region}.amazonaws.com/amazonlinux:latest
         Command:
           - echo
           - Hello world
-      resourceRequirements:
-        - type: MEMORY
-          value: 512
-        - type: VCPU
-          value: 0.25
+        ResourceRequirements:
+          - Type: MEMORY
+            Value: 512
+          - Type: VCPU
+            Value: 0.25
       RetryStrategy:
         Attempts: 1
+
+  BatchExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ecs-tasks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
 
   BatchJobQueue:
     Type: 'AWS::Batch::JobQueue'
@@ -362,7 +377,6 @@ Resources:
 
   BatchComputeEnvironment:
     Type: 'AWS::Batch::ComputeEnvironment'
-    ComputeEnvironmentName: batch-on-fargate-spot
     Properties:
       Type: MANAGED
       ComputeResources:
@@ -372,21 +386,8 @@ Resources:
           - !Ref PrivateSubnet
         SecurityGroupIds:
           - !Ref App01SecurityGroup
-      ServiceRole: !Ref BatchServiceRole
+      ServiceRole: !GetAtt BatchServiceRole.Arn
       State: ENABLED
-
-  BatchExecutionRole:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/ecsTaskExecutionRole'  
 
   BatchServiceRole:
     Type: 'AWS::IAM::Role'

@@ -64,12 +64,19 @@ Resources:
       EnableDnsSupport: true
       EnableDnsHostnames: true
       InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
 
   #-----------------------------------------------------------------------------
   # Internet Gateway
   #-----------------------------------------------------------------------------
   InternetGateway:
     Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ig"
 
   VPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -77,10 +84,16 @@ Resources:
       InternetGatewayId: !Ref InternetGateway
       VpcId: !Ref VPC
 
+  #-----------------------------------------------------------------------------
+  # Public Route Table
+  #-----------------------------------------------------------------------------
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-route-table"
 
   PublicRoute:
     Type: AWS::EC2::Route
@@ -99,12 +112,26 @@ Resources:
       AvailabilityZone: !Join ["-", [!Ref AZ, !Ref Zone]]
       MapPublicIpOnLaunch: true
       CidrBlock: !Sub [ "${VpcCidr}${Subnet}", { Subnet: !FindInMap [ VpcConfig, !Ref Env, PublicSubnet ]}]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-subnet"
 
   PublicSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicSubnet
       RouteTableId: !Ref PublicRouteTable
+
+  #-----------------------------------------------------------------------------
+  # Private Route Table
+  #-----------------------------------------------------------------------------
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-private-route-table"
 
   #-----------------------------------------------------------------------------
   # Private Subnet
@@ -115,11 +142,9 @@ Resources:
       VpcId: !Ref VPC
       AvailabilityZone: !Join ["-", [!Ref AZ, !Ref Zone]]
       CidrBlock: !Sub [ "${VpcCidr}${Subnet}", { Subnet: !FindInMap [ VpcConfig, !Ref Env, PrivateSubnet ]}]
-
-  PrivateRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-private-subnet"
 
   PrivateSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -136,12 +161,18 @@ Resources:
     Properties:
       AllocationId: !GetAtt NatGatewayEIP.AllocationId
       SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-nat-gateway"
 
   NatGatewayEIP:
     Type: AWS::EC2::EIP
     Condition: EnableNATGateway
     Properties:
       Domain: VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-nat-gateway-eip"
 
   PrivateRoute:
     Type: AWS::EC2::Route
@@ -154,17 +185,25 @@ Resources:
   #-----------------------------------------------------------------------------
   # VPC Endpoints
   #-----------------------------------------------------------------------------
-  SSMEndpoint:
+  S3Endpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
       VpcId: !Ref VPC
-      SubnetIds:
-        - !Ref PrivateSubnet
-      SecurityGroupIds:
-        - !Ref EndpointSecurityGroup
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+
+  EndpointSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: Endpoint Security Group
+      GroupDescription: Enable SSM Session to the Linux instance
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Sub [ "${VpcCidr}${Subnet}", { Subnet: !FindInMap [ VpcConfig, !Ref Env, VPC ]}]
 
   EC2MessageEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -190,6 +229,18 @@ Resources:
       SecurityGroupIds:
         - !Ref EndpointSecurityGroup
 
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+
   SSMAgentEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -202,45 +253,41 @@ Resources:
       SecurityGroupIds:
         - !Ref EndpointSecurityGroup
 
-  S3Endpoint:
+  ECREndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.dkr"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
       VpcId: !Ref VPC
-      RouteTableIds:
-        - !Ref PrivateRouteTable
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
 
-  EndpointSecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
+  LogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
     Properties:
-      GroupName: Endpoint Security Group
-      GroupDescription: Enable SSM Session to the Linux instance
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.logs"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
       VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: !Sub [ "${VpcCidr}${Subnet}", { Subnet: !FindInMap [ VpcConfig, !Ref Env, VPC ]}]
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
 
-  # https://docs.aws.amazon.com/ja_jp/systems-manager/latest/userguide/ssm-agent-minimum-s3-permissions.html
-  S3BucketPolicyForSSM:
-    Type: AWS::IAM::Policy
+  KMSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
     Properties:
-      PolicyName: S3BucketPolicyForSSM
-      Roles:
-        - !Ref ServerRole
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: "Allow"
-            Action: "s3:GetObject"
-            Resource:
-              - !Sub "arn:aws:s3:::aws-ssm-${AWS::Region}/*"
-              - !Sub "arn:aws:s3:::aws-windows-downloads-${AWS::Region}/*"
-              - !Sub "arn:aws:s3:::amazon-ssm-${AWS::Region}/*"
-              - !Sub "arn:aws:s3:::amazon-ssm-packages-${AWS::Region}/*"
-              - !Sub "arn:aws:s3:::${AWS::Region}-birdwatcher-prod/*"
-              - !Sub "arn:aws:s3:::patch-baseline-snapshot-${AWS::Region}/*"
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.kms"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
 
   #-----------------------------------------------------------------------------
   # EC2 App Server 01: Linux
@@ -251,6 +298,9 @@ Resources:
       GroupName: App Security Group 01
       GroupDescription: App Security Group 01
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-app-01"
 
   App01Instance:
     Type: AWS::EC2::Instance
@@ -269,7 +319,7 @@ Resources:
         CPUCredits: standard
       Tags:
         - Key: Name
-          Value: App01-Amzn2
+          Value: !Sub "${AWS::StackName}-app-01-amzn2"
 
   #-----------------------------------------------------------------------------
   # EC2 App Server 02: Windows
@@ -280,6 +330,9 @@ Resources:
   #     GroupName: App Security Group 02
   #     GroupDescription: App Security Group 02
   #     VpcId: !Ref VPC
+  #     Tags:
+  #     - Key: Name
+  #       Value: !Sub "${AWS::StackName}-sg-app-02"
 
   # App02Instance:
   #   Type: AWS::EC2::Instance
@@ -299,7 +352,7 @@ Resources:
   #       CPUCredits: standard
   #     Tags:
   #       - Key: Name
-  #         Value: App02-Windows
+  #         Value: !Sub "${AWS::StackName}-app-02-windows"
 
   #-----------------------------------------------------------------------------
   # EC2 IAM
@@ -326,6 +379,26 @@ Resources:
       Roles:
         - Ref: ServerRole
       InstanceProfileName: thin-ssm-Server
+
+  # https://docs.aws.amazon.com/ja_jp/systems-manager/latest/userguide/ssm-agent-minimum-s3-permissions.html
+  S3BucketPolicyForSSM:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: S3BucketPolicyForSSM
+      Roles:
+        - !Ref ServerRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action: "s3:GetObject"
+            Resource:
+              - !Sub "arn:aws:s3:::aws-ssm-${AWS::Region}/*"
+              - !Sub "arn:aws:s3:::aws-windows-downloads-${AWS::Region}/*"
+              - !Sub "arn:aws:s3:::amazon-ssm-${AWS::Region}/*"
+              - !Sub "arn:aws:s3:::amazon-ssm-packages-${AWS::Region}/*"
+              - !Sub "arn:aws:s3:::${AWS::Region}-birdwatcher-prod/*"
+              - !Sub "arn:aws:s3:::patch-baseline-snapshot-${AWS::Region}/*"
 
   #-----------------------------------------------------------------------------
   # AWS Batch

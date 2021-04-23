@@ -1,0 +1,18 @@
+Comment: >-
+  This state machine is for running AWS Batch.
+StartAt: ExecuteBatch
+States:
+  ExecuteBatch:
+    Type: Task
+    Resource: arn:aws:states:::batch:submitJob.sync
+    Parameters: 
+      JobName: testJob
+      JobDefinition: ${BatchJobDefinitionArn}
+      JobQueue: ${BatchJobQueueArn}
+      ContainerOverrides:
+        Environment:
+          - Name: PARAM_TEST
+            Value: "AWS Batch test!"
+    Next: Succeed
+  Succeed:
+    Type: Succeed

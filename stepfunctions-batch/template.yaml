@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Execute AWS Batch from AWS Step Functions
+Parameters:
+  ComputeSubnetId:
+    Default: subnet-abcdefghijklmn
+    Type: String
+  ComputeSecurityGroupId:
+    Default: sg-abcdefghijklmn
+    Type: String
+
+Resources:
+  #-----------------------------------------------------------------------------
+  # AWS Step Functions
+  #-----------------------------------------------------------------------------
+  StateMachineBatch:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: aws-batch-test
+      DefinitionUri: statemachine/batch.asl.yaml
+      DefinitionSubstitutions:
+        BatchJobDefinitionArn: !Ref BatchJobDefinition
+        BatchJobQueueArn: !Ref BatchJobQueue
+      Logging: 
+        Destinations: 
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt LogGroupBatch.Arn
+        IncludeExecutionData: True
+        Level: ALL
+      Policies:
+        - !Ref StepFunctionsLogPolicy
+        - !Ref StepFunctionsBatchPolicy
+
+  LogGroupBatch:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: /aws/stepfunctions/aws-batch-test
+
+  #-----------------------------------------------------------------------------
+  # Step Functions IAM
+  #-----------------------------------------------------------------------------
+  StepFunctionsLogPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogDelivery
+              - logs:GetLogDelivery
+              - logs:UpdateLogDelivery
+              - logs:DeleteLogDelivery
+              - logs:ListLogDeliveries
+              - logs:PutResourcePolicy
+              - logs:DescribeResourcePolicies
+              - logs:DescribeLogGroups
+            Resource: "*"
+
+  # https://docs.aws.amazon.com/ja_jp/step-functions/latest/dg/batch-iam.html
+  StepFunctionsBatchPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - batch:SubmitJob
+              - batch:DescribeJobs
+              - batch:TerminateJob
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - events:PutTargets
+              - events:PutRule
+              - events:DescribeRule
+            Resource:
+              - !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/StepFunctionsGetEventsForBatchJobsRule
+
+  #-----------------------------------------------------------------------------
+  # AWS Batch
+  #-----------------------------------------------------------------------------
+  BatchJobDefinition:
+    Type: 'AWS::Batch::JobDefinition'
+    Properties:
+      Type: container
+      PlatformCapabilities:
+        - FARGATE
+      ContainerProperties:
+        ExecutionRoleArn: !GetAtt BatchExecutionRole.Arn
+        FargatePlatformConfiguration:
+          PlatformVersion: LATEST
+        Image: !Sub 137112412989.dkr.ecr.${AWS::Region}.amazonaws.com/amazonlinux:latest
+        Command:
+          - "sh"
+          - "-c"
+          - "echo Hello world $PARAM_TEST"
+        ResourceRequirements:
+          - Type: MEMORY
+            Value: 512
+          - Type: VCPU
+            Value: 0.25
+      RetryStrategy:
+        Attempts: 1
+
+  BatchExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ecs-tasks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  BatchJobQueue:
+    Type: 'AWS::Batch::JobQueue'
+    Properties:
+      Priority: 1
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref BatchComputeEnvironment
+
+  BatchComputeEnvironment:
+    Type: 'AWS::Batch::ComputeEnvironment'
+    Properties:
+      Type: MANAGED
+      ComputeResources:
+        Type: FARGATE_SPOT
+        MaxvCpus: 4
+        Subnets:
+          - !Ref ComputeSubnetId
+        SecurityGroupIds:
+          - !Ref ComputeSecurityGroupId
+      ServiceRole: !GetAtt BatchServiceRole.Arn
+      State: ENABLED
+
+  BatchServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: batch.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole'
+
+Outputs:
+  BatchComputeEnvironmentArn:
+    Value: !Ref BatchComputeEnvironment
+  BatchJobQueueArn:
+    Value: !Ref BatchJobQueue
+  BatchJobDefinitionArn:
+    Value: !Ref BatchJobDefinition

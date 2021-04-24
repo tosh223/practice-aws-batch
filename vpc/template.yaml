@@ -292,34 +292,34 @@ Resources:
   #-----------------------------------------------------------------------------
   # EC2 App Server 01: Linux
   #-----------------------------------------------------------------------------
-  App01SecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupName: App Security Group 01
-      GroupDescription: App Security Group 01
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-sg-app-01"
+  # App01SecurityGroup:
+  #   Type: 'AWS::EC2::SecurityGroup'
+  #   Properties:
+  #     GroupName: App Security Group 01
+  #     GroupDescription: App Security Group 01
+  #     VpcId: !Ref VPC
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub "${AWS::StackName}-sg-app-01"
 
-  App01Instance:
-    Type: AWS::EC2::Instance
-    Properties:
-      ImageId: !Ref Ec2ImageIdAmzn2
-      InstanceType: t3.nano
-      IamInstanceProfile: !Ref EC2IamInstanceProfile
-      NetworkInterfaces: 
-        - SubnetId: !Ref PrivateSubnet
-          PrivateIpAddress: !Sub [ "${VpcCidr}${Ip}", { Ip: !FindInMap [ VpcConfig, !Ref Env, App01Instance ]}]
-          GroupSet: 
-            - !Ref App01SecurityGroup
-          AssociatePublicIpAddress: false
-          DeviceIndex: 0
-      CreditSpecification: 
-        CPUCredits: standard
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-app-01-amzn2"
+  # App01Instance:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     ImageId: !Ref Ec2ImageIdAmzn2
+  #     InstanceType: t3.nano
+  #     IamInstanceProfile: !Ref EC2IamInstanceProfile
+  #     NetworkInterfaces:
+  #       - SubnetId: !Ref PrivateSubnet
+  #         PrivateIpAddress: !Sub [ "${VpcCidr}${Ip}", { Ip: !FindInMap [ VpcConfig, !Ref Env, App01Instance ]}]
+  #         GroupSet:
+  #           - !Ref App01SecurityGroup
+  #         AssociatePublicIpAddress: false
+  #         DeviceIndex: 0
+  #     CreditSpecification:
+  #       CPUCredits: standard
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub "${AWS::StackName}-app-01-amzn2"
 
   #-----------------------------------------------------------------------------
   # EC2 App Server 02: Windows
@@ -357,53 +357,55 @@ Resources:
   #-----------------------------------------------------------------------------
   # EC2 IAM
   #-----------------------------------------------------------------------------
-  ServerRole:
-    Type: "AWS::IAM::Role"
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: "Allow"
-            Principal:
-              Service:
-                - "ec2.amazonaws.com"
-            Action:
-              - "sts:AssumeRole"
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  # ServerRole:
+  #   Type: "AWS::IAM::Role"
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: "Allow"
+  #           Principal:
+  #             Service:
+  #               - "ec2.amazonaws.com"
+  #           Action:
+  #             - "sts:AssumeRole"
+  #     ManagedPolicyArns:
+  #       - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 
-  EC2IamInstanceProfile:
-    Type: "AWS::IAM::InstanceProfile"
-    Properties:
-      Path: "/"
-      Roles:
-        - Ref: ServerRole
-      InstanceProfileName: thin-ssm-Server
+  # EC2IamInstanceProfile:
+  #   Type: "AWS::IAM::InstanceProfile"
+  #   Properties:
+  #     Path: "/"
+  #     Roles:
+  #       - Ref: ServerRole
+  #     InstanceProfileName: thin-ssm-Server
 
-  # https://docs.aws.amazon.com/ja_jp/systems-manager/latest/userguide/ssm-agent-minimum-s3-permissions.html
-  S3BucketPolicyForSSM:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: S3BucketPolicyForSSM
-      Roles:
-        - !Ref ServerRole
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: "Allow"
-            Action: "s3:GetObject"
-            Resource:
-              - !Sub "arn:aws:s3:::aws-ssm-${AWS::Region}/*"
-              - !Sub "arn:aws:s3:::aws-windows-downloads-${AWS::Region}/*"
-              - !Sub "arn:aws:s3:::amazon-ssm-${AWS::Region}/*"
-              - !Sub "arn:aws:s3:::amazon-ssm-packages-${AWS::Region}/*"
-              - !Sub "arn:aws:s3:::${AWS::Region}-birdwatcher-prod/*"
-              - !Sub "arn:aws:s3:::patch-baseline-snapshot-${AWS::Region}/*"
+  # # https://docs.aws.amazon.com/ja_jp/systems-manager/latest/userguide/ssm-agent-minimum-s3-permissions.html
+  # S3BucketPolicyForSSM:
+  #   Type: AWS::IAM::Policy
+  #   Properties:
+  #     PolicyName: S3BucketPolicyForSSM
+  #     Roles:
+  #       - !Ref ServerRole
+  #     PolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: "Allow"
+  #           Action: "s3:GetObject"
+  #           Resource:
+  #             - !Sub "arn:aws:s3:::aws-ssm-${AWS::Region}/*"
+  #             - !Sub "arn:aws:s3:::aws-windows-downloads-${AWS::Region}/*"
+  #             - !Sub "arn:aws:s3:::amazon-ssm-${AWS::Region}/*"
+  #             - !Sub "arn:aws:s3:::amazon-ssm-packages-${AWS::Region}/*"
+  #             - !Sub "arn:aws:s3:::${AWS::Region}-birdwatcher-prod/*"
+  #             - !Sub "arn:aws:s3:::patch-baseline-snapshot-${AWS::Region}/*"
 
 Outputs:
   VpcId:
     Value: !Ref VPC
+    Export:
+      Name : !Sub ${AWS::StackName}-VpcId
   PrivateSubnetId:
     Value: !Ref PrivateSubnet
-  App01SecurityGroupId:
-    Value: !Ref App01SecurityGroup
+    Export:
+      Name : !Sub ${AWS::StackName}-PrivateSubnetId

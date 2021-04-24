@@ -3,11 +3,8 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   Execute AWS Batch from AWS Step Functions
 Parameters:
-  ComputeSubnetId:
-    Default: subnet-abcdefghijklmn
-    Type: String
-  ComputeSecurityGroupId:
-    Default: sg-abcdefghijklmn
+  NetworkStack:
+    Default: vpc-for-aws-batch
     Type: String
 
 Resources:
@@ -136,9 +133,9 @@ Resources:
         Type: FARGATE_SPOT
         MaxvCpus: 4
         Subnets:
-          - !Ref ComputeSubnetId
+          - Fn::ImportValue: !Sub "${NetworkStack}-PrivateSubnetId"
         SecurityGroupIds:
-          - !Ref ComputeSecurityGroupId
+          - !Ref BatchSecurityGroup
       ServiceRole: !GetAtt BatchServiceRole.Arn
       State: ENABLED
 
@@ -154,6 +151,17 @@ Resources:
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole'
+
+  BatchSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: Batch Security Group
+      GroupDescription: Batch Security Group
+      VpcId:
+        Fn::ImportValue: !Sub "${NetworkStack}-VpcId"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-batch"
 
 Outputs:
   BatchComputeEnvironmentArn:

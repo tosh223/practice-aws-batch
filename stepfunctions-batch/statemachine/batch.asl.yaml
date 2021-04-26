@@ -13,6 +13,13 @@ States:
         Environment:
           - Name: PARAM_TEST
             Value: "AWS Batch test!"
+    Retry:
+      - ErrorEquals:
+          - Batch.TooManyRequestsException
+          - ECS.AmazonECSException
+        IntervalSeconds: 10
+        MaxAttempts: 2
+        BackoffRate: 1.5
     Next: Succeed
   Succeed:
     Type: Succeed

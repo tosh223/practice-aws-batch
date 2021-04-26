@@ -28,6 +28,17 @@ Resources:
       Policies:
         - !Ref StepFunctionsLogPolicy
         - !Ref StepFunctionsBatchPolicy
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            Name: StateMachineBatchSchedule
+            Description: StateMachineBatchSchedule
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 60
+              MaximumRetryAttempts: 1
+            # Run at 21:00(UTC) every day
+            Schedule: cron(0 21 * * ? *)
 
   LogGroupBatch:
     Type: AWS::Logs::LogGroup

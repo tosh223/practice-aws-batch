@@ -277,10 +277,10 @@ Resources:
       SecurityGroupIds:
         - !Ref EndpointSecurityGroup
 
-  KMSEndpoint:
+  SecretManagerEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.kms"
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
       VpcId: !Ref VPC

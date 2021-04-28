@@ -205,53 +205,53 @@ Resources:
           ToPort: 443
           CidrIp: !Sub [ "${VpcCidr}${Subnet}", { Subnet: !FindInMap [ VpcConfig, !Ref Env, VPC ]}]
 
-  EC2MessageEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2messages"
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      VpcId: !Ref VPC
-      SubnetIds:
-        - !Ref PrivateSubnet
-      SecurityGroupIds:
-        - !Ref EndpointSecurityGroup
+  # EC2MessageEndpoint:
+  #   Type: AWS::EC2::VPCEndpoint
+  #   Properties:
+  #     ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2messages"
+  #     VpcEndpointType: Interface
+  #     PrivateDnsEnabled: true
+  #     VpcId: !Ref VPC
+  #     SubnetIds:
+  #       - !Ref PrivateSubnet
+  #     SecurityGroupIds:
+  #       - !Ref EndpointSecurityGroup
 
-  EC2Endpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2"
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      VpcId: !Ref VPC
-      SubnetIds:
-        - !Ref PrivateSubnet
-      SecurityGroupIds:
-        - !Ref EndpointSecurityGroup
+  # EC2Endpoint:
+  #   Type: AWS::EC2::VPCEndpoint
+  #   Properties:
+  #     ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2"
+  #     VpcEndpointType: Interface
+  #     PrivateDnsEnabled: true
+  #     VpcId: !Ref VPC
+  #     SubnetIds:
+  #       - !Ref PrivateSubnet
+  #     SecurityGroupIds:
+  #       - !Ref EndpointSecurityGroup
 
-  SSMEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      VpcId: !Ref VPC
-      SubnetIds:
-        - !Ref PrivateSubnet
-      SecurityGroupIds:
-        - !Ref EndpointSecurityGroup
+  # SSMEndpoint:
+  #   Type: AWS::EC2::VPCEndpoint
+  #   Properties:
+  #     ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
+  #     VpcEndpointType: Interface
+  #     PrivateDnsEnabled: true
+  #     VpcId: !Ref VPC
+  #     SubnetIds:
+  #       - !Ref PrivateSubnet
+  #     SecurityGroupIds:
+  #       - !Ref EndpointSecurityGroup
 
-  SSMAgentEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssmmessages"
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      VpcId: !Ref VPC
-      SubnetIds:
-        - !Ref PrivateSubnet
-      SecurityGroupIds:
-        - !Ref EndpointSecurityGroup
+  # SSMAgentEndpoint:
+  #   Type: AWS::EC2::VPCEndpoint
+  #   Properties:
+  #     ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssmmessages"
+  #     VpcEndpointType: Interface
+  #     PrivateDnsEnabled: true
+  #     VpcId: !Ref VPC
+  #     SubnetIds:
+  #       - !Ref PrivateSubnet
+  #     SecurityGroupIds:
+  #       - !Ref EndpointSecurityGroup
 
   ECREndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -265,6 +265,20 @@ Resources:
       SecurityGroupIds:
         - !Ref EndpointSecurityGroup
 
+  ECRApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+
+  # https://stackoverflow.com/questions/64209899/resourceinitializationerror-failed-to-validate-logger-args-signal-killed
+  # ResourceInitializationError: failed to validate logger args: : signal: killed
   LogsEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:

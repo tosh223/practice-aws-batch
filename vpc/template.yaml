@@ -265,6 +265,8 @@ Resources:
       SecurityGroupIds:
         - !Ref EndpointSecurityGroup
 
+  # AWS Batch Failed
+  #   ResourceInitializationError: unable to pull secrets or registry auth: pull command failed: : signal: killed
   ECRApiEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -277,8 +279,9 @@ Resources:
       SecurityGroupIds:
         - !Ref EndpointSecurityGroup
 
-  # https://stackoverflow.com/questions/64209899/resourceinitializationerror-failed-to-validate-logger-args-signal-killed
-  # ResourceInitializationError: failed to validate logger args: : signal: killed
+  # AWS Batch Failed
+  #   ResourceInitializationError: failed to validate logger args: : signal: killed
+  #   https://stackoverflow.com/questions/64209899/resourceinitializationerror-failed-to-validate-logger-args-signal-killed
   LogsEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:

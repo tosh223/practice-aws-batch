@@ -13,6 +13,9 @@ States:
         Environment:
           - Name: PARAM_TEST
             Value: "AWS Batch test!"
+    InputPath: $
+    ResultPath: $.BatchResult
+    OutputPath: $
     Retry:
       - ErrorEquals:
           - Batch.TooManyRequestsException

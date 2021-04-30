@@ -1,28 +1,42 @@
 Comment: >-
   This state machine is for running AWS Batch.
-StartAt: ExecuteBatch
+StartAt: MapExecuteBatch
 States:
-  ExecuteBatch:
-    Type: Task
-    Resource: arn:aws:states:::batch:submitJob.sync
-    Parameters: 
-      JobName: testJob
-      JobDefinition: ${BatchJobDefinitionArn}
-      JobQueue: ${BatchJobQueueArn}
-      ContainerOverrides:
-        Environment:
-          - Name: PARAM_TEST
-            Value: "AWS Batch test!"
+  MapExecuteBatch:
+    Type: Map
+    MaxConcurrency: 25
     InputPath: $
-    ResultPath: $.BatchResult
-    OutputPath: $
-    Retry:
-      - ErrorEquals:
-          - Batch.TooManyRequestsException
-          - ECS.AmazonECSException
-        IntervalSeconds: 10
-        MaxAttempts: 2
-        BackoffRate: 1.5
+    ResultPath: $.MapBatchResults
+    ItemsPath: $.KeyValueArray
+    Parameters:
+      Parameter.$: $$.Map.Item.Value
+    Iterator:
+      StartAt: ExecuteBatch
+      States:
+        ExecuteBatch:
+          Type: Task
+          Resource: arn:aws:states:::batch:submitJob.sync
+          InputPath: $
+          ResultPath: $.BatchResult
+          OutputPath: $
+          Parameters:
+            JobName: testJob
+            JobDefinition: ${BatchJobDefinitionArn}
+            JobQueue: ${BatchJobQueueArn}
+            ContainerOverrides:
+              Environment:
+                - Name: PARAM_VALUE
+                  Value: "AWS Batch test!"
+                - Name: INPUT_VALUE
+                  Value.$: $.Parameter.Message
+          Retry:
+            - ErrorEquals:
+                - Batch.TooManyRequestsException
+                - ECS.AmazonECSException
+              IntervalSeconds: 10
+              MaxAttempts: 2
+              BackoffRate: 1.5
+          End: true
     Next: Succeed
   Succeed:
     Type: Succeed

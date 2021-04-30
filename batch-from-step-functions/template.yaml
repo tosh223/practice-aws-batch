@@ -34,6 +34,9 @@ Resources:
           Properties:
             Name: StateMachineBatchSchedule
             Description: StateMachineBatchSchedule
+            Input: "{\"KeyValueArray\":
+              [{\"Message\": \"Value00\"}, {\"Message\": \"Value01\"}, {\"Message\": \"Value02\"}]
+            }"
             RetryPolicy:
               MaximumEventAgeInSeconds: 60
               MaximumRetryAttempts: 1
@@ -104,7 +107,7 @@ Resources:
         Command:
           - "sh"
           - "-c"
-          - "echo Hello world $PARAM_TEST $SECRET_TEST"
+          - "echo Hello world $PARAM_VALUE $INPUT_VALUE $SECRET_TEST"
         ResourceRequirements:
           - Type: MEMORY
             Value: 512

@@ -19,8 +19,8 @@ Resources:
       DefinitionSubstitutions:
         BatchJobDefinitionArn: !Ref BatchJobDefinition
         BatchJobQueueArn: !Ref BatchJobQueue
-      Logging: 
-        Destinations: 
+      Logging:
+        Destinations:
           - CloudWatchLogsLogGroup:
               LogGroupArn: !GetAtt LogGroupBatch.Arn
         IncludeExecutionData: True
@@ -45,7 +45,7 @@ Resources:
 
   LogGroupBatch:
     Type: AWS::Logs::LogGroup
-    Properties: 
+    Properties:
       LogGroupName: /aws/stepfunctions/aws-batch-test
 
   #-----------------------------------------------------------------------------
@@ -161,7 +161,7 @@ Resources:
         Type: FARGATE_SPOT
         MaxvCpus: 4
         Subnets:
-          - Fn::ImportValue: !Sub "${NetworkStack}-PrivateSubnetId"
+          - Fn::ImportValue: !Sub "${NetworkStack}-PrivateSubnet4Id"
         SecurityGroupIds:
           - !Ref BatchSecurityGroup
       ServiceRole: !GetAtt BatchServiceRole.Arn
